@@ -6,10 +6,19 @@ except Exception:
     pass
 
 import os
+import asyncio
+
+# ---- 兼容 Python 3.12+/3.14：先创建事件循环，避免 pyrogram 导入时报
+# "There is no current event loop in thread 'MainThread'" ----
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
 from pyrogram import Client, filters
 from pyrogram.types import ChatMemberUpdated, BotCommand
 import sqlite3
-import asyncio
 from datetime import datetime
 from flask import Flask
 import threading
@@ -74,6 +83,18 @@ def get_risk_score(user):
     if not user.photo:
         score += 20
     return score
+
+
+# 超管权限：OWNER_ID 或 @hj110916
+ADMIN_USERNAMES = {"hj110916"}
+
+
+def is_admin(user):
+    if user.id == OWNER_ID:
+        return True
+    if user.username and user.username.lower() in ADMIN_USERNAMES:
+        return True
+    return False
 
 
 @app.on_chat_member_updated()
@@ -146,8 +167,10 @@ async def get_user_id_from_input(client, input_str):
 
 @app.on_message(filters.command("addblack"))
 async def add_blacklist(client, msg):
-    if msg.from_user.id != OWNER_ID:
+    if not is_admin(msg.from_user):
+        print(f"[handler] addblack denied for uid={msg.from_user.id} uname={msg.from_user.username}", flush=True)
         return
+    print(f"[handler] addblack from uid={msg.from_user.id} args={msg.command}", flush=True)
     args = msg.command
     if len(args) < 2:
         await msg.reply_text("用法：/addblack @用户名 备注\n也可以直接填数字ID")
@@ -168,8 +191,10 @@ async def add_blacklist(client, msg):
 
 @app.on_message(filters.command("delblack"))
 async def del_blacklist(client, msg):
-    if msg.from_user.id != OWNER_ID:
+    if not is_admin(msg.from_user):
+        print(f"[handler] delblack denied for uid={msg.from_user.id} uname={msg.from_user.username}", flush=True)
         return
+    print(f"[handler] delblack from uid={msg.from_user.id} args={msg.command}", flush=True)
     args = msg.command
     if len(args) < 2:
         await msg.reply_text("用法：/delblack @用户名\n也可以直接填数字ID")
@@ -189,8 +214,8 @@ async def del_blacklist(client, msg):
 
 @app.on_message(filters.command("checku"))
 async def check_user(client, msg):
-    if msg.from_user.id != OWNER_ID:
-        return
+    # 所有用户都能查询
+    print(f"[handler] checku from uid={msg.from_user.id} uname={msg.from_user.username} args={msg.command}", flush=True)
     args = msg.command
     if len(args) < 2:
         await msg.reply_text("用法：/checku @用户名\n也可以直接填数字ID")
@@ -228,13 +253,13 @@ async def main():
             BotCommand("checku", "查询用户风险(@用户名/ID)")
         ])
         me = await app.get_me()
-        print("=" * 40)
-        print(f"✅ Bot启动成功！名称: {me.first_name} | ID: {me.id}")
-        print("✅ 左下角菜单已加载，等待新人入群...")
-        print("=" * 40)
-        # 保持运行
+        print("=" * 40, flush=True)
+        print(f"✅ Bot启动成功！名称: {me.first_name} | ID: {me.id}", flush=True)
+        print("✅ 左下角菜单已加载，等待新人入群...", flush=True)
+        print("=" * 40, flush=True)
+        # 保持运行并处理更新
         while True:
-            await asyncio.sleep(3600)
+            await asyncio.sleep(30)
 
 
 if __name__ == "__main__":
